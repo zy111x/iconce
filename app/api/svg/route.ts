@@ -1,285 +1,64 @@
-import { toCamelCase } from "@/lib/utils";
-import Icon from "lucide-static";
-import { NextResponse } from "next/server";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { icons, type LucideIcon } from "lucide-react";
+
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  try {
-    const { searchParams: sp } = new URL(req.url);
+  const sp = new URL(req.url).searchParams;
+  const type = sp.get("type") === "text" ? "text" : "svg";
+  const value = sp.get("value") || "Sparkles";
+  const totalSize = clamp(Number(sp.get("totalSize") || 256), 64, 1024);
+  const iconSize = clamp(Number(sp.get("size") || 128), 12, totalSize);
+  const radius = clamp(Number(sp.get("radius") || 64), 0, totalSize / 2);
+  const strokeSize = clamp(Number(sp.get("strokeSize") || 0), 0, 64);
+  const angle = Number(sp.get("angle") || 45);
+  const primary = safeColor(sp.get("primaryColor") || "#FC466B");
+  const secondary = safeColor(sp.get("secondaryColor") || "#3F5EFB");
+  const color = safeColor(sp.get("color") || "#FFFFFF");
 
-    const iconInfo = {
-      type:
-        sp.get("type") === "gif"
-          ? "gif"
-          : sp.get("type") === "svg"
-          ? "svg"
-          : sp.get("type") === "text"
-          ? "text"
-          : "svg",
-      value: sp.get("value") || `sparkles`,
-      totalSize: Number(sp.get("totalSize") || "256"),
-      animate: Boolean(sp.get("animate") === "true"),
-      fillStyle: {
-        fillType:
-          (sp.get("fillType") === "Linear"
-            ? "Linear"
-            : sp.get("fillType") === "Solid"
-            ? "Solid"
-            : "Linear") || "Linear",
-        primaryColor: sp.get("primaryColor") || "#FC466B",
-        secondaryColor: sp.get("secondaryColor") || "#3F5EFB",
-        angle: sp.get("angle") || "45",
-        clip: Boolean(sp.get("clip") === "true"),
-      },
-      background: {
-        radialGlare: Boolean(sp.get("radialGlare") === "true"),
-        noiseTexture: false, // TODO
-        noiseOpacity: Number(sp.get("noiseOpacity") || "50"),
-        radius: sp.get("radius") || "64",
-        strokeSize: Number(sp.get("strokeSize") || "0"),
-        strokeColor: sp.get("strokeColor") || "#FFFFFF",
-        strokeOpacity: sp.get("strokeOpacity") || "100",
-      },
-      icon: {
-        color: sp.get("color") || "#FFFFFF",
-        size: Number(sp.get("size") || "128"),
-        family: sp.get("family") || "sans-serif",
-      },
-    };
-
-    let svgString = "";
-    let svgClipString = "";
-    if (iconInfo.type === "svg") {
-      const iconD = (Icon as { [key: string]: any })[
-        toCamelCase(iconInfo.value)
-      ];
-      //toCamelCase(iconInfo.value)
-
-      const regex = /<svg.*?>(.*?)<\/svg>/s;
-      const match = iconD.match(regex);
-
-      svgString = `
-        <svg 
-          xmlns="http://www.w3.org/2000/svg" 
-          width="${iconInfo.icon.size}"
-          height="${iconInfo.icon.size}"
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="${iconInfo.icon.color}"
-          stroke-width="2" 
-          stroke-linecap="round" 
-          stroke-linejoin="round"  
-          alignment-baseline="middle" 
-          x="${(iconInfo.totalSize - iconInfo.icon.size) / 2}"
-          y="${(iconInfo.totalSize - iconInfo.icon.size) / 2}">
-          ${match?.[1]}
-        </svg>
-        `;
-      svgClipString = `
-        <svg 
-          xmlns="http://www.w3.org/2000/svg" 
-          width="${iconInfo.icon.size}"
-          height="${iconInfo.icon.size}"
-          viewBox="0 0 24 24" 
-          fill="black" 
-          stroke="black"
-          stroke-width="2" 
-          stroke-linecap="round" 
-          stroke-linejoin="round"  
-          alignment-baseline="middle" 
-          x="${(iconInfo.totalSize - iconInfo.icon.size) / 2}"
-          y="${(iconInfo.totalSize - iconInfo.icon.size) / 2}">
-          ${match?.[1]}
-        </svg>
-      `;
-    }
-
-    let noiseImage = "";
-    if (iconInfo.background.noiseTexture) {
-      // getImageData("http://localhost:3000/noise.png").then((data) => {
-      //   noiseImage = data as string;
-      // });
-    }
-
-    return new Response(
-      `<svg
-        id="iconce.com"
-        width="${iconInfo.totalSize}"
-        height="${iconInfo.totalSize}"
-        viewBox="0 0 ${iconInfo.totalSize} ${iconInfo.totalSize}"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        xmlns:xlink="http://www.w3.org/1999/xlink"
-      >
-      <defs>
-        <linearGradient
-          id="r5"
-          gradientUnits="userSpaceOnUse"
-          gradientTransform="rotate(${iconInfo.fillStyle.angle})"
-          style="transform-origin:center center"
-        >
-          ${
-            iconInfo.animate
-              ? `<animateTransform
-              attributeName="gradientTransform"
-              type="rotate"
-              values="0;360"
-              dur="5s"
-              repeatCount="indefinite"
-            />`
-              : ""
-          }
-          <stop stop-color="${iconInfo.fillStyle.primaryColor}">
-            ${
-              iconInfo.animate
-                ? `<animate
-                attributeName="stop-color"
-                values="${iconInfo.fillStyle.primaryColor};${iconInfo.fillStyle.secondaryColor};${iconInfo.fillStyle.primaryColor}"
-                dur="3s"
-                repeatCount="indefinite"
-              />`
-                : ""
-            }
-          </stop>
-          <stop offset="1" stop-color="${iconInfo.fillStyle.secondaryColor}">
-            ${
-              iconInfo.animate
-                ? `<animate
-                attributeName="stop-color"
-                values="${iconInfo.fillStyle.secondaryColor};${iconInfo.fillStyle.primaryColor};${iconInfo.fillStyle.secondaryColor}"
-                dur="3s"
-                repeatCount="indefinite"
-              />`
-                : ""
-            }
-          </stop>
-        </linearGradient>
-        <radialGradient
-          id="r6"
-          cx="0"
-          cy="0"
-          r="1"
-          gradientUnits="userSpaceOnUse"
-          gradientTransform="translate(256) rotate(90) scale(512)"
-        >
-          <stop stop-color="white"></stop>
-          <stop offset="1" stop-color="white" stop-opacity="0"></stop>
-        </radialGradient>
-        ${
-          iconInfo.type === "svg" && iconInfo.fillStyle.clip
-            ? `<mask id="mask">
-                <rect
-                  id="r4"
-                  width="${iconInfo.totalSize}"
-                  height="${iconInfo.totalSize}"
-                  fill="white"
-                />
-                ${svgClipString}
-              </mask>`
-            : ""
-        }
-        ${
-          iconInfo.background.noiseTexture
-            ? `<mask id="clipmask">
-                <rect
-                  width="${iconInfo.totalSize}"
-                  height="${iconInfo.totalSize}"
-                  x="${iconInfo.background.strokeSize / 2}"
-                  y="${iconInfo.background.strokeSize / 2}"
-                  fill="white"
-                  rx="${iconInfo.background.radius}" // 设置圆角
-                />
-              </mask>`
-            : ""
-        }
-      </defs>
-      <rect
-        id="r4"
-        width="${iconInfo.totalSize - iconInfo.background.strokeSize}"
-        height="${iconInfo.totalSize - iconInfo.background.strokeSize}"
-        x="${iconInfo.background.strokeSize / 2}"
-        y="${iconInfo.background.strokeSize / 2}"
-        rx="${iconInfo.background.radius}"
-        fill="${
-          iconInfo.fillStyle.fillType === "Linear"
-            ? "url(#r5)"
-            : iconInfo.fillStyle.primaryColor
-        }"
-        stroke="${iconInfo.background.strokeColor}"
-        stroke-width="${iconInfo.background.strokeSize}"
-        stroke-opacity="${iconInfo.background.strokeOpacity}%"
-        paint-order="stroke"
-        mask="${
-          iconInfo.type === "svg" && iconInfo.fillStyle.clip
-            ? "url(#mask)"
-            : undefined
-        }"
-      ></rect>
-      ${
-        iconInfo.background.radialGlare
-          ? `<rect
-        width="${iconInfo.totalSize - iconInfo.background.strokeSize}"
-        height="${iconInfo.totalSize - iconInfo.background.strokeSize}"
-        x="${iconInfo.background.strokeSize / 2}"
-        y="${iconInfo.background.strokeSize / 2}"
-        fill="url(#r6)"
-        rx="${iconInfo.background.radius}"
-        style="mix-blend-mode: overlay"
-      ></rect>`
-          : ""
-      }
-      ${
-        iconInfo.background.noiseTexture
-          ? `<image
-              href="${noiseImage}"
-              width="${iconInfo.totalSize}"
-              height="${iconInfo.totalSize}"
-              x="0"
-              y="0"
-              mask="url(#clipmask)"
-              clipPath="url(#clip)"
-              opacity="${iconInfo.background.noiseOpacity ?? 50}%"></image>`
-          : ""
-      }
-      ${iconInfo.type === "svg" ? svgString : ""}
-      ${
-        iconInfo.type === "text"
-          ? `<text
-            x="50%"
-            y="50%"
-            font-size="${iconInfo.icon.size}"
-            font-family="${iconInfo.icon.family}"
-            font-weight="600"
-            fill="${iconInfo.icon.color}"
-            text-anchor="middle"
-            dy="0.35em">
-            ${iconInfo.value}
-          </text>`
-          : ""
-      }
-      ${
-        iconInfo.type === "gif"
-          ? `<image
-            href="${iconInfo.value}"
-            x="${(iconInfo.totalSize - iconInfo.icon.size) / 2}"
-            y="${(iconInfo.totalSize - iconInfo.icon.size) / 2}"
-            height="${iconInfo.icon.size}"
-            width="${iconInfo.icon.size}"
-            crossOrigin="anonymous"
-          />`
-          : ""
-      }
-    </svg>`,
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "image/svg+xml",
-        },
-      }
+  let foreground = "";
+  if (type === "svg") {
+    const Icon = icons[value as keyof typeof icons] as LucideIcon | undefined;
+    if (!Icon) return new Response("Unknown Lucide icon", { status: 404 });
+    foreground = renderToStaticMarkup(
+      React.createElement(Icon, {
+        x: (totalSize - iconSize) / 2,
+        y: (totalSize - iconSize) / 2,
+        width: iconSize,
+        height: iconSize,
+        color,
+        strokeWidth: 2,
+      })
     );
-  } catch (error) {
-    return NextResponse.json(
-      { message: "something went wrong" },
-      { status: 500 }
-    );
+  } else {
+    foreground = `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${color}" font-size="${Math.round(iconSize * 0.62)}" font-family="Inter,system-ui,sans-serif" font-weight="700">${escapeXml(value)}</text>`;
   }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalSize}" height="${totalSize}" viewBox="0 0 ${totalSize} ${totalSize}">
+  <defs>
+    <linearGradient id="g" gradientTransform="rotate(${angle} .5 .5)">
+      <stop offset="0" stop-color="${primary}"/><stop offset="1" stop-color="${secondary}"/>
+    </linearGradient>
+  </defs>
+  <rect x="${strokeSize / 2}" y="${strokeSize / 2}" width="${totalSize - strokeSize}" height="${totalSize - strokeSize}" rx="${radius}" fill="url(#g)" stroke="#fff" stroke-opacity=".8" stroke-width="${strokeSize}"/>
+  ${foreground}
+</svg>`;
+
+  return new Response(svg, {
+    headers: {
+      "content-type": "image/svg+xml; charset=utf-8",
+      "cache-control": "public, max-age=0, s-maxage=86400",
+    },
+  });
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(Number.isFinite(value) ? value : min, min), max);
+}
+function safeColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#FFFFFF";
+}
+function escapeXml(value: string) {
+  return value.replace(/[<>&'\"]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[char] || char));
 }
