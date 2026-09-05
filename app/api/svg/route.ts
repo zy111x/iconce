@@ -1,4 +1,4 @@
-import Icon from "lucide-static";
+import * as StaticIcons from "lucide-static";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
   let foreground = "";
   if (type === "svg") {
-    const raw = (Icon as Record<string, string>)[value];
+    const raw = StaticIcons[value as keyof typeof StaticIcons] as string | undefined;
     if (!raw) return new Response("Unknown Lucide icon", { status: 404 });
     const inner = raw.match(/<svg[^>]*>([\s\S]*?)<\/svg>/i)?.[1];
     if (!inner) return new Response("Invalid Lucide icon", { status: 500 });
