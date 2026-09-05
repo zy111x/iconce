@@ -1,6 +1,4 @@
-import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { icons, type LucideIcon } from "lucide-react";
+import Icon from "lucide-static";
 
 export const runtime = "nodejs";
 
@@ -19,18 +17,11 @@ export async function GET(req: Request) {
 
   let foreground = "";
   if (type === "svg") {
-    const Icon = icons[value as keyof typeof icons] as LucideIcon | undefined;
-    if (!Icon) return new Response("Unknown Lucide icon", { status: 404 });
-    foreground = renderToStaticMarkup(
-      React.createElement(Icon, {
-        x: (totalSize - iconSize) / 2,
-        y: (totalSize - iconSize) / 2,
-        width: iconSize,
-        height: iconSize,
-        color,
-        strokeWidth: 2,
-      })
-    );
+    const raw = (Icon as Record<string, string>)[value];
+    if (!raw) return new Response("Unknown Lucide icon", { status: 404 });
+    const inner = raw.match(/<svg[^>]*>([\s\S]*?)<\/svg>/i)?.[1];
+    if (!inner) return new Response("Invalid Lucide icon", { status: 500 });
+    foreground = `<svg x="${(totalSize - iconSize) / 2}" y="${(totalSize - iconSize) / 2}" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
   } else {
     foreground = `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${color}" font-size="${Math.round(iconSize * 0.62)}" font-family="Inter,system-ui,sans-serif" font-weight="700">${escapeXml(value)}</text>`;
   }
