@@ -1,25 +1,19 @@
-import { MetadataRoute } from "next";
+import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "ICONCE",
-    short_name: "ICONCE",
-    description:
-      "Create and customize your own icons in just a few clicks, and download them in SVG, PNG",
+    name: "Icon Studio",
+    short_name: "Icon Studio",
+    description: "A lightweight personal icon studio for Lucide icons, emoji, text and SVG.",
     start_url: "/",
     display: "standalone",
-    background_color: "#fff",
-    theme_color: "#fff",
+    background_color: "#1d2022",
+    theme_color: "#1f2023",
     icons: [
       {
         src: "/favicon.ico",
-        sizes: "32x32",
+        sizes: "any",
         type: "image/x-icon",
-      },
-      {
-        src: "/logo.png",
-        sizes: "256x256",
-        type: "image/png",
       },
     ],
   };
