@@ -1,5 +1,6 @@
 "use client";
 
+import emojiOptions from "unicode-emoji-json/data-ordered-emoji.json";
 import {
   ChevronDown,
   ChevronLeft,
@@ -12,8 +13,11 @@ import {
   LayoutDashboard,
   Link as LinkIcon,
   Palette,
+  Redo2,
+  RotateCcw,
   Search,
   Sparkles,
+  Undo2,
   X,
 } from "lucide-react";
 import { icons, type LucideIcon } from "lucide-react";
@@ -24,6 +28,7 @@ import {
   useState,
   type ChangeEvent,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 
 const gradientPresets = [
@@ -45,12 +50,7 @@ const gradientPresets = [
   ["#5C5C5C", "#0F1015"],
 ] as const;
 
-const emojiOptions = [
-  "✨", "😎", "🚀", "🔥", "🎉", "❤️", "⭐", "🌈",
-  "💡", "⚡", "🎨", "🧠", "🤖", "👾", "🎯", "🛠️",
-  "📦", "🔮", "🌙", "☀️", "🍀", "🌊", "💎", "🧩",
-  "📌", "🪄", "🎵", "📷", "✈️", "🛰️", "🦄", "🐳",
-];
+const allEmojiOptions = emojiOptions as string[];
 
 const fontFamilies = [
   "sans-serif",
@@ -95,6 +95,11 @@ type StudioState = {
   };
 };
 
+type EditorSnapshot = {
+  state: StudioState;
+  localSvgData: string;
+};
+
 const initialState: StudioState = {
   filename: "export-icon",
   type: "svg",
@@ -125,7 +130,7 @@ const initialState: StudioState = {
 };
 
 export default function Page() {
-  const [state, setState] = useState<StudioState>(initialState);
+  const [state, setRawState] = useState<StudioState>(initialState);
   const [query, setQuery] = useState("");
   const [iconPage, setIconPage] = useState(1);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -133,12 +138,84 @@ export default function Page() {
   const [exportModal, setExportModal] = useState(false);
   const [exportSvg, setExportSvg] = useState(true);
   const [exportPng, setExportPng] = useState(false);
-  const [localSvgData, setLocalSvgData] = useState("");
+  const [localSvgData, setRawLocalSvgData] = useState("");
   const [notice, setNotice] = useState("");
   const [mobilePanel, setMobilePanel] = useState<"left" | "right" | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const noticeTimer = useRef<number | undefined>(undefined);
+  const stateRef = useRef<StudioState>(initialState);
+  const localSvgDataRef = useRef("");
+  const pastRef = useRef<EditorSnapshot[]>([]);
+  const futureRef = useRef<EditorSnapshot[]>([]);
   const perPage = 40;
+
+  const flash = (message: string) => {
+    setNotice(message);
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(""), 1800);
+  };
+
+  const commitSnapshot = (nextState: StudioState, nextLocalSvgData = localSvgDataRef.current) => {
+    const currentState = stateRef.current;
+    const currentLocalSvgData = localSvgDataRef.current;
+    const stateChanged = JSON.stringify(currentState) !== JSON.stringify(nextState);
+    const localChanged = currentLocalSvgData !== nextLocalSvgData;
+    if (!stateChanged && !localChanged) return;
+
+    pastRef.current = [
+      ...pastRef.current.slice(-99),
+      { state: currentState, localSvgData: currentLocalSvgData },
+    ];
+    futureRef.current = [];
+    stateRef.current = nextState;
+    localSvgDataRef.current = nextLocalSvgData;
+    setRawState(nextState);
+    if (localChanged) setRawLocalSvgData(nextLocalSvgData);
+  };
+
+  const setState = (action: SetStateAction<StudioState>) => {
+    const previous = stateRef.current;
+    const next = typeof action === "function"
+      ? (action as (prev: StudioState) => StudioState)(previous)
+      : action;
+    commitSnapshot(next);
+  };
+
+  const restoreSnapshot = (snapshot: EditorSnapshot) => {
+    stateRef.current = snapshot.state;
+    localSvgDataRef.current = snapshot.localSvgData;
+    setRawState(snapshot.state);
+    setRawLocalSvgData(snapshot.localSvgData);
+  };
+
+  const undo = () => {
+    const previous = pastRef.current.pop();
+    if (!previous) return;
+    futureRef.current.push({ state: stateRef.current, localSvgData: localSvgDataRef.current });
+    restoreSnapshot(previous);
+    flash("Undone");
+  };
+
+  const redo = () => {
+    const next = futureRef.current.pop();
+    if (!next) return;
+    pastRef.current.push({ state: stateRef.current, localSvgData: localSvgDataRef.current });
+    restoreSnapshot(next);
+    flash("Redone");
+  };
+
+  const resetAll = () => {
+    commitSnapshot(initialState, "");
+    setQuery("");
+    setIconPage(1);
+    setEmojiOpen(false);
+    setMenu(null);
+    setExportModal(false);
+    setExportSvg(true);
+    setExportPng(false);
+    setMobilePanel(null);
+    flash("Reset all settings");
+  };
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
@@ -149,38 +226,63 @@ export default function Page() {
       return Number.isFinite(raw) ? raw : fallback;
     };
 
-    setState((prev) => ({
-      ...prev,
-      filename: sp.get("filename") || prev.filename,
-      type: sp.get("type") === "text" ? "text" : "svg",
-      value: sp.get("value") || prev.value,
-      totalSize: numberParam("totalSize", prev.totalSize),
-      animate: sp.get("animate") === "true",
-      fillStyle: {
-        fillType: sp.get("fillType") === "Solid" ? "Solid" : "Linear",
-        primaryColor: safeHex(sp.get("primaryColor"), prev.fillStyle.primaryColor),
-        secondaryColor: safeHex(sp.get("secondaryColor"), prev.fillStyle.secondaryColor),
-        angle: numberParam("angle", prev.fillStyle.angle),
-        clip: sp.get("clip") === "true",
-      },
-      background: {
-        radialGlare: sp.get("radialGlare") === "true",
-        noiseTexture: sp.get("noiseTexture") === "true",
-        noiseOpacity: numberParam("noiseOpacity", prev.background.noiseOpacity),
-        radius: numberParam("radius", prev.background.radius),
-        strokeSize: numberParam("strokeSize", prev.background.strokeSize),
-        strokeColor: safeHex(sp.get("strokeColor"), prev.background.strokeColor),
-        strokeOpacity: numberParam("strokeOpacity", prev.background.strokeOpacity),
-      },
-      icon: {
-        color: safeHex(sp.get("color"), prev.icon.color),
-        size: numberParam("size", prev.icon.size),
-        family: sp.get("family") || prev.icon.family,
-      },
-    }));
+    setRawState((prev) => {
+      const next: StudioState = {
+        ...prev,
+        filename: sp.get("filename") || prev.filename,
+        type: sp.get("type") === "text" ? "text" : "svg",
+        value: sp.get("value") || prev.value,
+        totalSize: numberParam("totalSize", prev.totalSize),
+        animate: sp.get("animate") === "true",
+        fillStyle: {
+          fillType: sp.get("fillType") === "Solid" ? "Solid" : "Linear",
+          primaryColor: safeHex(sp.get("primaryColor"), prev.fillStyle.primaryColor),
+          secondaryColor: safeHex(sp.get("secondaryColor"), prev.fillStyle.secondaryColor),
+          angle: numberParam("angle", prev.fillStyle.angle),
+          clip: sp.get("clip") === "true",
+        },
+        background: {
+          radialGlare: sp.get("radialGlare") === "true",
+          noiseTexture: sp.get("noiseTexture") === "true",
+          noiseOpacity: numberParam("noiseOpacity", prev.background.noiseOpacity),
+          radius: numberParam("radius", prev.background.radius),
+          strokeSize: numberParam("strokeSize", prev.background.strokeSize),
+          strokeColor: safeHex(sp.get("strokeColor"), prev.background.strokeColor),
+          strokeOpacity: numberParam("strokeOpacity", prev.background.strokeOpacity),
+        },
+        icon: {
+          color: safeHex(sp.get("color"), prev.icon.color),
+          size: numberParam("size", prev.icon.size),
+          family: sp.get("family") || prev.icon.family,
+        },
+      };
+      stateRef.current = next;
+      return next;
+    });
   }, []);
 
   useEffect(() => setIconPage(1), [query]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const editingText = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable;
+      if (editingText) return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+      } else if ((key === "z" && event.shiftKey) || key === "y") {
+        event.preventDefault();
+        redo();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const iconNames = useMemo(() => {
     const all = Object.keys(icons)
@@ -196,12 +298,8 @@ export default function Page() {
   const ActiveIcon = state.type === "svg"
     ? (icons[state.value as keyof typeof icons] as LucideIcon | undefined)
     : undefined;
-
-  const flash = (message: string) => {
-    setNotice(message);
-    if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
-    noticeTimer.current = window.setTimeout(() => setNotice(""), 1800);
-  };
+  const canUndo = pastRef.current.length > 0;
+  const canRedo = futureRef.current.length > 0;
 
   const serialize = () => {
     if (!svgRef.current) return "";
@@ -342,8 +440,7 @@ export default function Page() {
         return;
       }
       const data = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`;
-      setLocalSvgData(data);
-      setState((prev) => ({ ...prev, type: "local", value: file.name }));
+      commitSnapshot({ ...stateRef.current, type: "local", value: file.name }, data);
       flash("Local SVG loaded");
     };
     reader.readAsText(file);
@@ -361,10 +458,11 @@ export default function Page() {
         <div className="emoji-wrap">
           <button className="icon-button emoji-button" onClick={() => setEmojiOpen((v) => !v)} aria-label="Choose emoji">😎</button>
           {emojiOpen && (
-            <div className="emoji-popover">
-              {emojiOptions.map((emoji) => (
+            <div className="emoji-popover" role="dialog" aria-label="All emoji">
+              {allEmojiOptions.map((emoji, index) => (
                 <button
-                  key={emoji}
+                  key={`${emoji}-${index}`}
+                  title={emoji}
                   onClick={() => {
                     setState({ ...state, type: "text", value: emoji });
                     setEmojiOpen(false);
@@ -466,6 +564,12 @@ export default function Page() {
         <div className="brand"><Sparkles size={19} /><span>Icon Studio</span></div>
         <input className="filename" value={state.filename} maxLength={100} onChange={(e) => setState({ ...state, filename: e.target.value })} aria-label="Filename" />
         <div className="top-actions">
+          <div className="history-actions" aria-label="Editor history">
+            <button disabled={!canUndo} onClick={undo} title="Undo"><Undo2 size={16} /></button>
+            <button disabled={!canRedo} onClick={redo} title="Redo"><Redo2 size={16} /></button>
+            <button onClick={resetAll} title="Reset all"><RotateCcw size={16} /></button>
+          </div>
+
           <div className="menu-wrap">
             <button className="top-link" onClick={() => setMenu(menu === "api" ? null : "api")}>API</button>
             {menu === "api" && (
